@@ -1,5 +1,10 @@
+import org.jetbrains.kotlin.gradle.dsl.KotlinCompile
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.util.stream.Collectors
+
 buildscript {
-    rootProject.version = '0.17.0-SNAPSHOT'
+    rootProject.version = '0.19.0-SNAPSHOT'
     rootProject.group = 'ch.tutteli.atrium'
 
     def toolProjectsFun = subprojects.findAll {
@@ -7,32 +12,44 @@ buildscript {
     }
     ext {
         // main
-        kbox_version = '0.15.1'
-        kbox = { "ch.tutteli.kbox:kbox:$kbox_version" }
+        kboxVersion = '0.15.1'
         niokVersion = '1.4.7'
-        niok = { "ch.tutteli.niok:niok:$niokVersion" }
-        kotlin_version = '1.3.72'
+        // !!! keep in sync with /buildSrc/build.gradle.kts !!!
+        kotlinVersion = "1.4.32"
 
         // test
-        jacocoToolVersion = '0.8.7'
-        junitPlatformVersion = '1.8.1'
-        jupiterVersion = '5.8.1'
-        spek2Version = '2.0.12'
+        jacocoToolVersion = '0.8.8'
+        junitPlatformVersion = '1.9.2'
+        jupiterVersion = '5.9.2'
+        spekVersion = '2.0.12'
+        kotestVersion = '4.6.4'
         spekExtensionsVersion = '1.2.1'
         spekExtensions = { "ch.tutteli.spek:tutteli-spek-extensions:$spekExtensionsVersion" }
         mockkVersion = '1.10.0'
 
         //TODO remove with 1.0.0
-        mockito_kotlin_version = '2.2.0'
-        mockito = { "com.nhaarman.mockitokotlin2:mockito-kotlin:$mockito_kotlin_version" }
+        mockitoKotlinVersion = '2.2.0'
+        mockito = { "com.nhaarman.mockitokotlin2:mockito-kotlin:$mockitoKotlinVersion" }
 
         // project setup
         tutteli_plugins_version = '0.33.1'
-        node_plugin_version = '2.2.0'
         d8_version = '1.6.84'
 
         // release
         gradle_nexus_publish_plugin_version = '1.1.0'
+
+        multiplatformProjectNames = [
+            "core",
+            "logic", "logic-kotlin_1_3",
+            "translations-en_GB", "translations-de_CH",
+            "api-fluent-en_GB", "api-fluent-en_GB-kotlin_1_3",
+            "api-infix-en_GB", "api-infix-en_GB-kotlin_1_3",
+            "fluent-en_GB",
+            "infix-en_GB",
+            "verbs",
+            "verbs-internal",
+            "specs"
+        ]
 
         // gh-pages.gradle
         docProjects = (subprojects - toolProjectsFun).findAll {
@@ -70,9 +87,8 @@ buildscript {
                 (subprojects - toolProjectsFun).findAll {
                     !it.name.endsWith("-js") &&
                         // would have two classes with the same name if we add it as project as well,
-                        // (clashes with "${project.name}-translations-en_GB-jvm"
-                        it.name != "${rootProject.name}-translations-de_CH-common" &&
-                        it.name != "${rootProject.name}-translations-de_CH-jvm" &&
+                        // (clashes with "${rootProject.name}-translations-en_GB"
+                        it.name != "${rootProject.name}-translations-de_CH" &&
                         // does not make sense to listen specs in coverage
                         !it.name.startsWith("${rootProject.name}-specs") &&
                         !it.name.contains("smoke-test")
@@ -92,21 +108,20 @@ buildscript {
         gradlePluginPortal()
     }
     dependencies {
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
         classpath "ch.tutteli:tutteli-gradle-dokka:$tutteli_plugins_version"
         classpath "ch.tutteli:tutteli-gradle-kotlin-module-info:$tutteli_plugins_version"
         classpath "ch.tutteli:tutteli-gradle-kotlin-utils:$tutteli_plugins_version"
         classpath "ch.tutteli:tutteli-gradle-project-utils:$tutteli_plugins_version"
         classpath "ch.tutteli:tutteli-gradle-publish:$tutteli_plugins_version"
         classpath "ch.tutteli:tutteli-gradle-spek:$tutteli_plugins_version"
-        classpath "com.github.node-gradle:gradle-node-plugin:$node_plugin_version"
         classpath "io.github.gradle-nexus:publish-plugin:$gradle_nexus_publish_plugin_version"
     }
 }
 
 apply plugin: "ch.tutteli.project.utils"
 apply plugin: 'ch.tutteli.kotlin.utils'
-kotlinutils.kotlinVersion = kotlin_version
+kotlinutils.kotlinVersion = kotlinVersion
 
 repositories {
     mavenCentral()
@@ -123,10 +138,10 @@ dependencies {
     dependabot "org.junit.platform:junit-platform-console:$junitPlatformVersion"
     dependabot "ch.tutteli.spek:tutteli-spek-extensions:$spekExtensionsVersion"
     dependabot "ch.tutteli.niok:niok:$niokVersion"
-    dependabot "ch.tutteli.kbox:kbox:$kbox_version"
+    dependabot "ch.tutteli.kbox:kbox:$kboxVersion"
 
     //TODO remove with 1.0.0
-    dependabot "com.nhaarman.mockitokotlin2:mockito-kotlin:$mockito_kotlin_version"
+    dependabot "com.nhaarman.mockitokotlin2:mockito-kotlin:$mockitoKotlinVersion"
 
 }
 
@@ -138,59 +153,204 @@ subprojects {
     }
 }
 
-def commonProjects = getCommonProjects()
-def jsProjects = getJsProjects()
-def jvmProjects = getJvmProjects()
-def multiplatformProjects = commonProjects + jsProjects + jvmProjects
 
-configureCommonProjects()
-configureAndroidProjects()
-configureJsProjects()
-configureJvmProjects()
+
+def multiplatformProjects = multiplatformProjectNames.collect { prefixedProject(it) }
+configure(multiplatformProjects) { subproject ->
+    apply plugin: "kotlin-multiplatform"
+
+    kotlin {
+        jvm {
+            compilations.all {
+                kotlinOptions.jvmTarget = "11"
+            }
+
+            //for module-info.java and Java sources in test
+            withJava()
+
+            testRuns["test"].executionTask.configure {
+                useJUnitPlatform {
+                    includeEngines("spek2", "junit-jupiter", "kotest")
+                }
+            }
+        }
+        //TODO 0.21.0 switch from LEGACY to IR once we output Kotlin > 1.4
+        js(LEGACY) { nodejs() }
+
+        targets.all {
+            compilations.all {
+                //TODO 0.20.0 or later once we drop support of Kotlin 1.2
+                //kotlinOptions.allWarningsAsErrors = true
+            }
+        }
+
+        sourceSets {
+            commonMain {
+                dependencies {
+                    // TODO 0.20.0 shouldn't be necessary to add stdlib dependency to kotlin with kotlin 1.5.x (is automatically added)
+                    api(kotlin("stdlib-common"))
+                    api(kotlin("reflect"))
+                }
+            }
+            commonTest {
+                dependencies {
+                    // TODO 0.20.0 switch to kotlin(test) with update to kotlin > 1.4
+                    implementation kotlin('test-common')
+                    implementation kotlin('test-annotations-common')
+                }
+            }
+            jvmMain {
+                dependencies{
+                    // TODO 0.20.0 shouldn't be necessary to add the dependency to kotlin with kotlin 1.5.x (is automatically added, but check, maybe stdlib is added automatically but not stdlib-jdk8)
+                    api(kotlin("stdlib-jdk8"))
+                }
+            }
+            jvmTest {
+                dependencies {
+                    // TODO  0.20.0 should no longer be necessary with kotlin 1.5, adding kotlin('test') to common should be enough
+                    implementation kotlin('test-junit5')
+                    runtimeOnly "org.junit.jupiter:junit-jupiter-engine:$jupiterVersion"
+                    implementation("org.spekframework.spek2:spek-dsl-jvm:$spekVersion") {
+                        exclude group: 'org.jetbrains.kotlin'
+                    }
+                    runtimeOnly("org.spekframework.spek2:spek-runner-junit5:$spekVersion") {
+                        exclude group: 'org.jetbrains.kotlin'
+                    }
+                }
+            }
+            jsMain {
+                dependencies{
+                    // TODO 0.20.0 shouldn't be necessary to add the dependency to kotlin with kotlin 1.5.x
+                    api(kotlin("stdlib-js"))
+                }
+            }
+            jsTest {
+                dependencies {
+                    // TODO  0.20.0 should no longer be necessary with kotlin 1.5, adding kotlin('test') to common should be enough
+                    implementation kotlin('test-js')
+                }
+            }
+
+            all {
+                languageSettings {
+                    languageVersion = '1.2'
+                    apiVersion = '1.2'
+                    useExperimentalAnnotation('kotlin.Experimental')
+                }
+            }
+            configureEach {
+                if (it.name.endsWith("Test")) {
+                    languageSettings {
+                        languageVersion = '1.3'
+                        apiVersion = '1.3'
+                    }
+                }
+            }
+        }
+    }
+
+    //TODO 0.20.0 update tutteli-gradle-plugins and remove as this is handled there
+    // calling the Kotlin extension function in buildSrc
+    ConfigureTestTasksKt.configureTestTasks(subproject)
+
+    sourceCompatibility = 11
+    targetCompatibility = 11
+
+    //TODO 0.20.0 update tutteli-gradle-plugins and remove as this is handled there and allows to use the normal java/ directory instead of module/
+    def moduleInfoReplaceMe = {
+        if (subproject.components.findByName('java') == null) throw new IllegalStateException("""\
+            Could not find the java component.
+            Did you forget to apply the kotlin plugin? Make sure it is applied before this plugin.
+            """.stripIndent()
+        )
+
+        def srcModule = "src/module"
+        def moduleInfo = subproject.file("$srcModule/module-info.java")
+
+        if (moduleInfo.exists()) {
+
+            subproject.sourceSets {
+                module {
+                    java {
+                        srcDirs = [srcModule]
+                        compileClasspath = main.compileClasspath
+                    }
+                }
+                main {
+                    kotlin { srcDirs += [srcModule] }
+                }
+            }
+            subproject.compileModuleJava.configure {
+                dependsOn subproject.jvmMainClasses
+
+                destinationDir = subproject.kotlin.jvm().compilations.main.output.classesDirs.getFiles().findAll { it.getPath().contains("kotlin") }[0]
+                doFirst {
+                    options.compilerArgs = ['--module-path', classpath.asPath]
+                    classpath = subproject.files()
+                }
+            }
+            subproject.tasks.getByName('jvmJar').dependsOn subproject.compileModuleJava
+        }
+    }
+    moduleInfoReplaceMe()
+}
+
+//TODO 0.21.0 remove if we use kotlin 1.7.x should no longer be necessary
+tasks.withType(KotlinCompile).configureEach {
+    kotlinOptions {
+        freeCompilerArgs = ["-Xopt-in=kotlin.RequiresOptIn"]
+    }
+}
 
 configure(subprojects.findAll {
     def parentName = it.projectDir.parentFile.name
     it.name != "bc-tests" && parentName != "old" && parentName != "bc-tests"
-} - multiplatformProjects) {
+}  - multiplatformProjects) { subproject ->
     apply plugin: 'kotlin'
     dependencies {
-        implementation kotlinStdlib()
+        implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion"
     }
-}
-
-configure(commonProjects) {
-    compileKotlinCommon {
-        kotlinOptions.languageVersion = '1.2'
-    }
-    compileTestKotlinCommon {
-        //TODO activate as soon as https://youtrack.jetbrains.com/issue/KT-30580 is fixed
-        kotlinOptions.allWarningsAsErrors = false
-    }
-}
-configure(jsProjects) { subProject ->
-    compileKotlin2Js {
+    compileKotlin {
         kotlinOptions {
-            if (subProject.name.startsWith("atrium-translations")) {
-                //necessary as the module name is then also called atrium-translations-js and can be shared (the name) by the other translation modules
-                outputFile = "$buildDir/classes/kotlin/main/atrium-translations-js.js"
-            }
-            languageVersion = '1.2'
+            jvmTarget = "11"
+        }
+    }
+    compileTestKotlin {
+        kotlinOptions {
+            jvmTarget = "11"
         }
     }
 
-    compileTestKotlin2Js {
-        //TODO activate as soon as https://youtrack.jetbrains.com/issue/KT-21348 is fixed
-        kotlinOptions.allWarningsAsErrors = false
-    }
+    sourceCompatibility = 11
+    targetCompatibility = 11
 }
 
-def nonCommonAndJsProjects = subprojects - commonProjects - jsProjects
-configure(nonCommonAndJsProjects - toolProjects) { Project subproject ->
+
+//TODO 0.19.0 I guess this is still a problem when realising. Check new modules
+//configure(jsProjects) { subProject ->
+//    compileKotlin2Js {
+//        kotlinOptions {
+//            if (subProject.name.startsWith("atrium-translations")) {
+//                //necessary as the module name is then also called atrium-translations-js and can be shared (the name) by the other translation modules
+//                outputFile = "$buildDir/classes/kotlin/main/atrium-translations-js.js"
+//            }
+//            languageVersion = '1.2'
+//        }
+//    }
+//
+//    compileTestKotlin2Js {
+//        //TODO activate as soon as https://youtrack.jetbrains.com/issue/KT-21348 is fixed
+//        kotlinOptions.allWarningsAsErrors = false
+//    }
+//}
+
+
+//TODO 0.19.0 configure dokka plugins again also for multiplatformProjects
+configure(subprojects - toolProjects - multiplatformProjects) { Project subproject ->
     apply plugin: 'ch.tutteli.dokka'
     apply plugin: 'ch.tutteli.kotlin.module.info'
 
     dokka {
-//        logging.setLevel(LogLevel.QUIET)
         samples = findSamples([subproject])
     }
     compileKotlin {
@@ -200,9 +360,6 @@ configure(nonCommonAndJsProjects - toolProjects) { Project subproject ->
             allWarningsAsErrors = false
         }
     }
-
-    sourceCompatibility = 8
-    targetCompatibility = 8
 }
 
 //allow kotlin 1.3 for kotlin_1_3 modules
@@ -234,7 +391,8 @@ configure(apiProjects) { apiProject ->
 
 def bundleSmokeTests = subprojects.findAll { it.name.contains('-smoke-test') }
 
-configure(subprojects - bundleSmokeTests - toolProjects) { subproject ->
+//TODO 0.19.0 multiplatformProjects have to be published differently, update to tutteli-gradle-plugins
+configure(subprojects - bundleSmokeTests - toolProjects - multiplatformProjects) { subproject ->
     apply plugin: 'ch.tutteli.publish'
 
     tutteliPublish {
@@ -242,9 +400,17 @@ configure(subprojects - bundleSmokeTests - toolProjects) { subproject ->
     }
 }
 
-configure(jacocoMulti.jacocoProjects + getAndroidProjects()) {
+//TODO 0.19.0 spek is used in another way, see above, but we have not yet applied the jacoco plugin
+configure(jacocoMulti.jacocoProjects - multiplatformProjects) {
     apply plugin: 'ch.tutteli.spek'
-    spek.version = spek2Version
+    spek.version = spekVersion
+
+    //TODO 0.19.0 remove once we update to new tutteli-gradle-plugins
+    // we don't want to have a dependency on dl.bintray anymore (the current version of ch.tutteli.spek (which is old)
+    // still adds it for convenience reasons.
+    repositories.removeAll {
+        it instanceof MavenArtifactRepository && (it as MavenArtifactRepository).url.toString().startsWith("https://dl.bintray.com")
+    }
 
     dependencies {
         testImplementation mockito(), excludeKotlin
@@ -258,8 +424,8 @@ configure(jacocoMulti.jacocoProjects + getAndroidProjects()) {
             }
 
             jacocoReport {
-                if (project.hasProperty('jacoco_additional')) {
-                    project.jacoco_additional.each { otherProject ->
+                if (project.hasProperty('jacocoAdditional')) {
+                    project.jacocoAdditional.each { otherProject ->
                         sourceSets otherProject.sourceSets.main
                     }
                 }
@@ -271,12 +437,12 @@ configure(jacocoMulti.jacocoProjects + getAndroidProjects()) {
     }
 }
 
-configure(subprojects - toolProjects) {
-    sourceSets {
-        all {
-            languageSettings {
-                useExperimentalAnnotation('kotlin.Experimental')
-            }
+
+// this is already configured for multiplatformProjects further above, thus the substraction
+configure(subprojects - toolProjects - multiplatformProjects) {
+    sourceSets.configureEach {
+        languageSettings {
+            useExperimentalAnnotation('kotlin.Experimental')
         }
     }
 }
@@ -294,14 +460,14 @@ configure(bundleSmokeTests) {
     def isABundleAndNotExtensionSmokeTest = it.name.endsWith(suffix)
     if (isABundleAndNotExtensionSmokeTest) {
         def bundleUnderTest = it.name.substring(0, it.name.indexOf(suffix))
-        Project bundle = project(":$bundleUnderTest-jvm")
+        Project bundle = project(":$bundleUnderTest")
 
         description = "Represents a JDK >= 9 smoke test for $bundleUnderTest"
 
         sourceCompatibility = JavaVersion.current()
         targetCompatibility = JavaVersion.current()
 
-        ext.jacoco_additional = [bundle]
+        ext.jacocoAdditional = [bundle]
 
         sourceSets {
             // we are reusing the source from the bundle, so that we do not have to re-invent the spec
@@ -314,86 +480,6 @@ configure(bundleSmokeTests) {
         }
     }
 }
-
-
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.util.stream.Collectors
-
-List<Project> projectNamesToProject(String[] names) {
-    names.collect { projectName -> prefixedProject(projectName) }
-}
-
-def createJsTestTask(String... subprojectNames) {
-    configure(projectNamesToProject(subprojectNames)) {
-        apply plugin: 'com.github.node-gradle.node'
-
-        compileTestKotlin2Js.configure {
-            kotlinOptions.moduleKind = "commonjs"
-            kotlinOptions.sourceMap = true
-            kotlinOptions.sourceMapEmbedSources = "always"
-        }
-
-        task populateNodeModules(type: Copy, dependsOn: compileKotlin2Js) {
-            from compileKotlin2Js.destinationDir
-
-            prefixedProject('verbs-internal-js').afterEvaluate {
-                // TODO 0.18.0, check if still required with the new Kotlin MPP plugin
-                configurations.testRuntimeClasspath.allDependencies.withType(ProjectDependency).each {
-                    dependsOn(it.dependencyProject.assemble)
-                }
-
-                configurations.testRuntimeClasspath.each {
-                    from zipTree(it.absolutePath).matching { include '*.js', '*.js.map' }
-                }
-            }
-
-            into "${buildDir}/node_modules"
-        }
-
-        def nodeModulesParentDir = file("$rootProject.projectDir/gradle/")
-        node {
-            download = true
-            npmVersion = '6.4.1'
-            workDir = file("$rootProject.projectDir/.gradle/nodejs")
-            npmWorkDir = file("$rootProject.projectDir/.gradle/npm")
-            nodeModulesDir = nodeModulesParentDir
-        }
-
-        task runMocha(type: NpxTask, dependsOn: [compileTestKotlin2Js, populateNodeModules]) {
-            command = "mocha"
-            args = [compileTestKotlin2Js.outputFile]
-        }
-        test.dependsOn runMocha
-    }
-}
-
-createJsTestTask(
-    'core-js',
-    'api-fluent-en_GB-js',
-    'api-infix-en_GB-js',
-    'fluent-en_GB-js',
-    'infix-en_GB-js'
-)
-
-def useJupiter(String... projectNames) {
-    configure(projectNamesToProject(projectNames)) {
-        dependencies {
-            testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$jupiterVersion"
-        }
-        test {
-            options {
-                includeEngines 'junit-jupiter'
-            }
-        }
-    }
-}
-
-useJupiter(
-    'core-jvm',
-    'api-fluent-en_GB-jvm',
-    'api-infix-en_GB-jvm',
-)
 
 def getSubprojectTasks(String name) {
     return subprojects.collect { it.tasks.findByName(name) }.findAll { it != null }
@@ -426,8 +512,8 @@ Release & deploy a commit
 
 Either use the following commands or the manual steps below
 
-export ATRIUM_PREVIOUS_VERSION=0.17.0-RC1
-export ATRIUM_VERSION=0.17.0
+export ATRIUM_PREVIOUS_VERSION=0.18.0
+export ATRIUM_VERSION=0.19.0
 find ./ -name "*.md" | xargs perl -0777 -i \
    -pe "s@$ATRIUM_PREVIOUS_VERSION@$ATRIUM_VERSION@g;" \
    -pe "s@tree/main@tree/v$ATRIUM_VERSION@g;" \
@@ -458,11 +544,11 @@ alternatively the manual steps:
     h) commit & push (modified CONTRIBUTING.md, differences.md, build.gradle and README.md)
 
 2. prepare release on github
-    a) git tag vX.Y.Z
-    b) git push origin vX.Y.Z
+    a) git tag "v$ATRIUM_VERSION"
+    b) git push origin "v$ATRIUM_VERSION"
     c) Log in to github and create draft for the release
 
-The tag is required for dokka in order that the source-mapping works
+The tag is required for dokka in order that the externalLinkDocumentation and source-mapping works
 
 3. update github pages:
 Assumes you have a atrium-gh-pages folder on the same level as atrium where the gh-pages branch is checked out
@@ -470,13 +556,13 @@ Assumes you have a atrium-gh-pages folder on the same level as atrium where the 
 Either use the following commands or the manual steps below (assuming ATRIUM_VERSION is already set from commands above)
 
 gr ghPages
+cd ../atrium-gh-pages
 perl -0777 -i \
   -pe "s@$ATRIUM_PREVIOUS_VERSION@$ATRIUM_VERSION@g;" \
-  ../atrium-gh-pages/latest/index.html
+  ./latest/index.html
 perl -0777 -i \
   -pe "s@(- \[$ATRIUM_PREVIOUS_VERSION\]\($ATRIUM_PREVIOUS_VERSION\))@- \[$ATRIUM_VERSION\]\($ATRIUM_VERSION\)\n\$1@;" \
-  ../atrium-gh-pages/README.md
-cd ../atrium-gh-pages
+  ./README.md
 git add . && git commit -m "v$ATRIUM_VERSION"
 
 check changes
@@ -495,7 +581,8 @@ alternatively the manual steps:
     a) java -version 2>&1 | grep "version \"11" && CI=true gr clean publishToSonatype
     b) Log into https://oss.sonatype.org/#stagingRepositories
     c) check if staging repo is ok
-    d) gr closeAndReleaseSonatypeStagingRepository
+    d) close repo
+    e) release repo
 
 4. publish release on github
     1) Log in to github and publish draft
@@ -506,8 +593,8 @@ Prepare next dev cycle
 
 Either use the following commands or the manual steps below
 
-export ATRIUM_VERSION=0.17.0-RC1
-export ATRIUM_NEXT_VERSION=0.17.0
+export ATRIUM_VERSION=0.18.0
+export ATRIUM_NEXT_VERSION=0.19.0
 find ./ -name "*.md" | xargs perl -0777 -i \
    -pe "s@tree/v$ATRIUM_VERSION@tree/main@g;" \
    -pe "s@$ATRIUM_VERSION/doc@latest#/doc@g;" \
@@ -537,7 +624,7 @@ e) change rootProject.version in build.gradle to X.Y.Z-SNAPSHOT
 f) commit & push changes
 
 2. establish backward compatibility tests for the previous version
-a) add new version at the end of atrium-bc-test/build.gradle
+a) append new version to bcConfigs in settings.gradle.kts
 b) git commit -a -m "establish backward compatibility tests for v$ATRIUM_VERSION"
 c) commit & push changes
 

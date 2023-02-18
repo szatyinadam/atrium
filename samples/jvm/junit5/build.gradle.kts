@@ -3,11 +3,11 @@
 
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
-val atriumVersion = "0.16.0"
-val junitVersion = "5.8.1"
+val atriumVersion = "0.18.0"
+val junitVersion = "5.9.2"
 
 plugins {
-    kotlin("jvm") version "1.5.31"
+    kotlin("jvm") version "1.8.10"
 }
 
 group = "org.atriumlib.samples"
@@ -39,5 +39,12 @@ tasks.test {
         showExceptions = true
         showCauses = true
         showStackTraces = true
+    }
+}
+
+kotlin {
+    target.compilations.all {
+        // Atrium requires at least jdk 11
+        kotlinOptions.jvmTarget = "11"
     }
 }

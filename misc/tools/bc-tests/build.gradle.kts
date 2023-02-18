@@ -30,7 +30,7 @@ val niokVersion: String by rootProject.extra
 val jupiterVersion: String by rootProject.extra
 val mockkVersion: String by rootProject.extra
 val junitPlatformVersion: String by rootProject.extra
-val spek2Version: String by rootProject.extra
+val spekVersion: String by rootProject.extra
 val jacocoToolVersion: String by rootProject.extra
 
 description =
@@ -160,6 +160,13 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
             compileTasks.forEach {
                 it.configure {
                     dependsOn(unzip)
+
+                    doFirst {
+                        if (this is AbstractCompile) {
+                            // we don't want to see all the deprecation errors during compilation
+                            this.logging.level = LogLevel.QUIET
+                        }
+                    }
                 }
             }
         }
@@ -168,53 +175,39 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
     configure(listOf(project(":bc-tests:$oldVersion-specs"))) {
         the<KotlinMultiplatformExtension>().apply {
             jvm()
-            // TODO 0.16.0 reactivate once we have transitioned everything to the new MPP plugin
-//            js().nodejs {}
+            js().nodejs {}
             sourceSets {
                 val commonMain by getting {
                     dependencies {
                         api(kotlin("stdlib-common"))
                         api(kotlin("reflect"))
                         api("io.mockk:mockk-common:$mockkVersion")
-                        api("org.spekframework.spek2:spek-dsl-metadata:$spek2Version")
+                        api("org.spekframework.spek2:spek-dsl-metadata:$spekVersion")
 
-                        api(project(":atrium-verbs-internal-common"))
+                        api(project(":atrium-verbs-internal"))
 
                         // required by specs
                         //might be we have to switch to api as we have defined some of the modules as api in atrium-specs
-                        implementation(project(":atrium-fluent-en_GB-common"))
+                        implementation(prefixedProject("fluent-en_GB"))
                     }
                 }
                 val jvmMain by getting {
                     dependencies {
                         api("io.mockk:mockk:$mockkVersion")
-                        api("org.spekframework.spek2:spek-dsl-jvm:$spek2Version")
+                        api("org.spekframework.spek2:spek-dsl-jvm:$spekVersion")
                         api("ch.tutteli.spek:tutteli-spek-extensions:$spekExtensionsVersion")
                         api("ch.tutteli.niok:niok:$niokVersion")
-
-                        api(project(":atrium-verbs-internal-jvm"))
-
-                        // required by specs
-                        //might be we have to switch to api as we have defined some of the modules as api in atrium-specs
-                        implementation(project(":atrium-fluent-en_GB-jvm"))
                     }
                 }
-                // TODO 0.16.0 reactivate once we have transitioned everything to the new MPP plugin
-//                val jsMain by getting {
-//                    dependencies {
-//                        api("io.mockk:mockk-dsl-js:$mockkVersion")
-//                        api("org.spekframework.spek2:spek-dsl-js:$spek2Version")
-//
-//                        api(project(":atrium-verbs-internal-js"))
-//
-//                        // required by specs
-//                        //might be we have to switch to api as we have defined some of the modules as api in atrium-specs
-//                        implementation(project(":atrium-fluent-en_GB-js"))
-//
-//                        //TODO 1.0.0 should no longer be necessary once updated to kotlin 1.4.x
-//                        implementation(kotlin("stdlib-js"))
-//                    }
-//                }
+                val jsMain by getting {
+                    dependencies {
+                        api("io.mockk:mockk-dsl-js:$mockkVersion")
+                        api("org.spekframework.spek2:spek-dsl-js:$spekVersion")
+
+                        //TODO 0.20.0 should no longer be necessary once updated to kotlin 1.4.x
+                        implementation(kotlin("stdlib-js"))
+                    }
+                }
             }
         }
 
@@ -312,7 +305,7 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
                             dependencies {
                                 implementation(project(":atrium-api-$apiName-jvm"))
                                 if (apiName == "infix-en_GB") {
-                                    implementation(project(":atrium-translations-de_CH-jvm"))
+                                    implementation(project(":atrium-translations-de_CH"))
                                 }
                                 configurations[confName].dependencies.forEach {
                                     implementation(it)
@@ -325,7 +318,7 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
 
                                 // required by specs
                                 implementation(project(":atrium-fluent-en_GB-jvm"))
-                                implementation(project(":atrium-verbs-internal-jvm"))
+                                implementation(project(":atrium-verbs-internal"))
 
                                 // to run forgiving spek tests
                                 runtimeOnly(project(testEngineProjectName))
@@ -346,8 +339,7 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
 
             the<KotlinMultiplatformExtension>().apply {
 
-                // TODO 0.16.0 reactivate once we have transitioned everything to the new MPP plugin
-//                js().nodejs {}
+                js().nodejs {}
 
                 jvm {
                     configureTestSetupAndJdkVersion()
@@ -366,7 +358,7 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
                         // we want to run the samples as well
                         dependsOn(tasks.named("build"))
                     }
-                    //TODO 0.16.0 not yet sure if it makes more sense to include it into :check as well
+                    //TODO 0.20.0 not yet sure if it makes more sense to include it into :check as well
 //                    tasks.named("check").configure {
 //                        dependsOn(bcTest)
 //                    }
@@ -375,15 +367,16 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
                 sourceSets {
                     val commonTest by getting {
                         dependencies {
-                            implementation(project(":atrium-api-$apiName-common"))
+                            implementation(project(":atrium-api-$apiName"))
                             implementation(project(":bc-tests:$oldVersion-specs")) {
                                 if (apiName == "infix-en_GB") {
-                                    exclude(module = "${rootProject.name}-translations-en_GB-common")
-                                    exclude(module = "${rootProject.name}-translations-en_GB-jvm")
+                                    exclude(module = "${rootProject.name}-translations-en_GB")
                                 }
                             }
                             if (apiName == "infix-en_GB") {
-                                implementation(project(":atrium-translations-de_CH-common"))
+                                implementation(project(":atrium-translations-de_CH"))
+                            } else {
+                                implementation(project(":atrium-translations-en_GB"))
                             }
 
                             // for samples
@@ -394,11 +387,6 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
                     val jvmTest by getting {
 
                         dependencies {
-                            implementation(project(":atrium-api-$apiName-jvm"))
-                            if (apiName == "infix-en_GB") {
-                                implementation(project(":atrium-translations-de_CH-jvm"))
-                            }
-
                             // to run forgiving spek tests
                             runtimeOnly(project(testEngineProjectName))
 
@@ -408,20 +396,18 @@ bcConfigs.forEach { (oldVersion, apis, pair) ->
 
                         }
                     }
-                    // TODO 0.16.0 reactivate once we have transitioned everything to the new MPP plugin
-//                    val jsTest by getting {
-//                        dependencies {
-//                            implementation(project(":atrium-api-$apiName-js"))
-//                            implementation(kotlin("test-js"))
-//
-//
-//                            api(project(":atrium-core-robstoll-js"))
-//                            api(project(":atrium-domain-robstoll-js"))
-//
-//                            //TODO 1.0.0 should no longer be necessary once updated to kotlin 1.4.x
-//                            implementation(kotlin("stdlib-js"))
-//                        }
-//                    }
+                    val jsTest by getting {
+                        dependencies {
+                            implementation(kotlin("test-js"))
+
+                            //TODO shouldn't be necessary
+                            api(project(":atrium-core-robstoll"))
+                            api(project(":atrium-domain-robstolls"))
+
+                            //TODO 0.20.0 should no longer be necessary once updated to kotlin 1.4.x
+                            implementation(kotlin("stdlib-js"))
+                        }
+                    }
                 }
             }
             configureTestTasks()
@@ -464,14 +450,14 @@ fun Project.createJacocoReportTask(
                     !it.name.contains("translations-en_GB") &&
                         !it.name.contains("fluent-en_GB")
                 } + listOf(
-                    project(":atrium-translations-de_CH-jvm"),
-                    project(":atrium-translations-de_CH-common")
+                    project(":atrium-translations-de_CH"),
+                    project(":atrium-translations-de_CH")
                 )
             }
             else -> throw IllegalStateException("re-adjust jacoco task")
         }
         projects.forEach {
-            //TODO 0.16.0 simplify once all project use new MPP plugin
+            //TODO 0.20.0 simplify once all project use new MPP plugin
             val sourceSetContainer = it.extensions.findByType<SourceSetContainer>()
             if (sourceSetContainer != null) {
                 sourceSets(sourceSetContainer["main"])
@@ -504,61 +490,6 @@ fun Project.createJacocoReportTask(
     return jacocoReport
 }
 
-
-fun Project.configureTestTasks() {
-    fun memoizeTestFile(testTask: Test) =
-        project.file("${project.buildDir}/test-results/memoize-previous-state-${testTask.name}.txt")
-
-    tasks.withType<Test> {
-        testLogging {
-            events(
-                TestLogEvent.FAILED,
-                TestLogEvent.SKIPPED,
-                TestLogEvent.STANDARD_OUT,
-                TestLogEvent.STANDARD_ERROR
-            )
-            exceptionFormat = TestExceptionFormat.FULL
-            showExceptions = true
-            showCauses = true
-            showStackTraces = true
-        }
-        val testTask = this
-        addTestListener(object : TestListener {
-            override fun beforeSuite(suite: TestDescriptor) {}
-            override fun beforeTest(testDescriptor: TestDescriptor) {}
-            override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
-            override fun afterSuite(suite: TestDescriptor, result: TestResult) {
-                if (suite.parent == null) {
-                    if (result.testCount == 0L) {
-                        throw GradleException("No tests executed, most likely the discovery failed.")
-                    }
-                    println("Result: ${result.resultType} (${result.successfulTestCount} succeeded, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped)")
-                    memoizeTestFile(testTask).writeText(result.resultType.toString())
-                }
-            }
-        })
-    }
-
-    tasks.withType<Test>().forEach { testTask ->
-        val failIfTestFailedLastTime =
-            tasks.register("fail-if-${testTask.name}-failed-last-time") {
-                doLast {
-                    if (!testTask.didWork) {
-                        val memoizeTestFile = memoizeTestFile(testTask)
-                        if (memoizeTestFile.exists() && memoizeTestFile.readText() == TestResult.ResultType.FAILURE.toString()) {
-                            val allTests = tasks.getByName("allTests") as TestReport
-                            throw GradleException(
-                                "test failed in last run, execute clean${testTask.name} to force its execution\n" +
-                                    "See the following report for more information:\nfile://${allTests.destinationDir}/index.html"
-                            )
-                        }
-                    }
-                }
-            }
-        testTask.finalizedBy(failIfTestFailedLastTime)
-    }
-}
-
 fun Project.rewriteFile(filePath: String, f: (String) -> String) {
     val file = file(filePath)
     file.writeText(f(file.readText()))
@@ -569,368 +500,16 @@ fun Project.rewriteFile(filePath: String, f: (String) -> String) {
 // Known source backward compatibility breaks:
 // remove sources if you change something here in order that the changes take effect
 
-listOf("0.14.0", "0.15.0").forEach { version ->
-    with(project(":bc-tests:$version-specs")) {
-        defineSourceFix("common") {
-            listOf(
-                "IterableAnyAssertionsSpec",
-                "IterableContainsInAnyOrderAtLeast1EntriesAssertionsSpec",
-                "IterableContainsInAnyOrderOnlyEntriesAssertionsSpec",
-                "IterableContainsInOrderOnlyEntriesAssertionsSpec"
-            ).forEach { spec ->
-                rewriteFile("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/integration/$spec.kt") {
-                    it
-                        .replaceFirst("import ch.tutteli.atrium.api.cc.en_GB.returnValueOf", "")
-                        .replaceFirst(
-                            "import ch.tutteli.atrium.domain.builders.migration.asAssert\n" +
-                                "import ch.tutteli.atrium.domain.builders.migration.asExpect", ""
-                        )
-                        .replaceFirst(
-                            Regex("//TODO remove with 1.0.0\n.*it\\(\"\\\$returnValueOfFun\\(...\\) states warning that subject is not set\"\\)([^\\}]+\\}){4}"),
-                            ""
-                        )
-                }
-            }
-
-            // fix specs, was a wrong implementation and the specs tested the wrong thing
-            rewriteFile("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/integration/IterableAssertionsSpec.kt") {
-                it.replaceFirst(
-                    "contains(\"\$hasDescriptionBasic: \$duplicateElements\")",
-                    "contains(\"\$hasNotDescriptionBasic: \$duplicateElements\")"
-                )
-            }
-
-            listOf(
-                "IterableContainsInOrderOnlyGroupedEntriesAssertionsSpec",
-                "IterableContainsInOrderOnlyGroupedValuesAssertionsSpec"
-            ).forEach { spec ->
-                rewriteFile("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/integration/$spec.kt") {
-                    it.replaceFirst(
-                        "import ch.tutteli.atrium.domain.builders.utils.Group",
-                        "import ch.tutteli.atrium.logic.utils.Group"
-                    )
-                }
-            }
-
-
-            // deleted AssertionPlant and co. in 0.16.0, hence specs don't make sense any more (it's a bc on core level not API)
-            file("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/checking/").deleteRecursively()
-            file("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/creating/").deleteRecursively()
-            file("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/reporting/TextIndentAssertionGroupFormatterSpec.kt").delete()
-
-            // we removed ExpectBuilder in 0.17.0
-            rewriteFile("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/SubjectLessSpec.kt") {
-                it
-                    .replaceFirst("import ch.tutteli.atrium.core.coreFactory", "")
-                    .replaceFirst(
-                        "import ch.tutteli.atrium.domain.builders.reporting.ExpectBuilder\n" +
-                            "import ch.tutteli.atrium.domain.builders.reporting.ExpectOptions",
-                        "import ch.tutteli.atrium.logic.creating.RootExpectBuilder\n" +
-                            "import ch.tutteli.atrium.creating.ExperimentalComponentFactoryContainer\n" +
-                            "import ch.tutteli.atrium.core.ExperimentalNewExpectTypes\n" +
-                            "import ch.tutteli.atrium.reporting.AtriumErrorAdjuster\n" +
-                            "import ch.tutteli.atrium.reporting.erroradjusters.NoOpAtriumErrorAdjuster\n"
-                    )
-                    .replaceFirst(
-                        "val container = ExpectBuilder.forSubject(1.0)",
-                        "@Suppress(\"DEPRECATION\" /* OptIn is only available since 1.3.70 which we cannot use if we want to support 1.2 */)\n" +
-                            "                @UseExperimental(ExperimentalNewExpectTypes::class, ExperimentalComponentFactoryContainer::class)\n" +
-                            "                val container = RootExpectBuilder.forSubject(1.0)"
-                    )
-                    .replaceFirst(
-                        ".withOptions(\n" +
-                            "                        ExpectOptions(\n" +
-                            "                            reporter = coreFactory.newOnlyFailureReporter(\n" +
-                            "                                coreFactory.newAssertionFormatterFacade(coreFactory.newAssertionFormatterController()),\n" +
-                            "                                coreFactory.newNoOpAtriumErrorAdjuster()\n" +
-                            "                            )\n" +
-                            "                        )\n" +
-                            "                    )", ".withOptions {\n" +
-                            "                        withComponent(AtriumErrorAdjuster::class) { _ -> NoOpAtriumErrorAdjuster }\n" +
-                            "                    }"
-                    )
-
-            }
-
-            // ReporterFactory removed, needs to be done via ComponentFactoryContainer
-            file("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/testutils/AsciiBulletPointReporterFactory.kt").toPath()
-                .deleteIfExists()
-            //just don't bother to rewrite it and this one is not that important
-            file("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/verbs/VerbSpec.kt").toPath()
-                .deleteIfExists()
-        }
-
-        defineSourceFix("jvm") {
-            rewriteFile("src/jvmMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/integration/BigDecimalAssertionsSpec.kt") {
-                it.replaceFirst(
-                    "import ch.tutteli.atrium.domain.builders.creating.PleaseUseReplacementException",
-                    "import ch.tutteli.atrium.creating.PleaseUseReplacementException"
-                )
-            }
-            rewriteFile("src/jvmMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/reporting/translating/TranslatorIntSpec.kt") {
-                it
-                    .replaceFirst(
-                        "import ch.tutteli.atrium.domain.builders.reporting.ExpectBuilder\n" +
-                            "import ch.tutteli.atrium.domain.builders.reporting.ExpectOptions",
-                        "import ch.tutteli.atrium.logic.creating.RootExpectBuilder\n" +
-                            "import ch.tutteli.atrium.creating.ExperimentalComponentFactoryContainer\n" +
-                            "import ch.tutteli.atrium.core.ExperimentalNewExpectTypes\n"
-                    )
-                    .replaceFirst(
-                        "abstract class TranslatorIntSpec(",
-                        "@Suppress(\"DEPRECATION\" /* OptIn is only available since 1.3.70 which we cannot use if we want to support 1.2 */)\n" +
-                            "@UseExperimental(ExperimentalNewExpectTypes::class, ExperimentalComponentFactoryContainer::class)\n" +
-                            "abstract class TranslatorIntSpec("
-                    )
-                    .replace(Regex("ExpectBuilder\\.forSubject\\(([^\\)]+)\\)"), "RootExpectBuilder.forSubject\\($1\\)")
-                    .replace(
-                        Regex("\\.withOptions\\(ExpectOptions\\(reporter = ([^\\)]+)\\)\\)"),
-                        ".withOptions\\{\n" +
-                            "                withComponent\\(Reporter::class\\) \\{ _ -> $1\\}\n" +
-                            "            \\}"
-                    )
-            }
-        }
-    }
-
-    listOf("fluent", "infix").forEach { apiShortName ->
-        with(project(":bc-tests:$version-api-$apiShortName-en_GB")) {
-            defineSourceFix("common") {
-                // not really a source compatibility break but we don't have access here to an internal function
-                rewriteFile("src/commonTest/kotlin/ch/tutteli/atrium/api/$apiShortName/en_GB/CharSequenceContainsSpecBase.kt") {
-                    it
-                        .replaceFirst(
-                            "import ch.tutteli.atrium.api.$apiShortName.en_GB.creating.charsequence.contains.impl.StaticName",
-                            ""
-                        )
-                        .replace(Regex(" StaticName\\.([a-zA-Z]+)"), "\"$1\"")
-                }
-
-                rewriteFile("src/commonTest/kotlin/ch/tutteli/atrium/api/$apiShortName/en_GB/IterableAnyAssertionsSpec.kt") {
-                    it.replaceFirst("import ch.tutteli.atrium.domain.builders.ExpectImpl", "")
-                }
-
-
-                listOf(
-                    "IterableContainsInOrderOnlyGroupedEntriesAssertionsSpec",
-                    "IterableContainsInOrderOnlyGroupedValuesAssertionsSpec",
-                    "IterableContainsSpecBase"
-                ).forEach { spec ->
-                    rewriteFile("src/commonTest/kotlin/ch/tutteli/atrium/api/$apiShortName/en_GB/$spec.kt") {
-                        it.replaceFirst(
-                            "import ch.tutteli.atrium.domain.builders.utils.Group",
-                            "import ch.tutteli.atrium.logic.utils.Group"
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // testsources jar currently includes resources files in the root (as it would be in a jar)
-    with(project(":bc-tests:$version-api-infix-en_GB")) {
-        defineSourceFix("common") {
-            // we removed WithAsciiReporter in 0.17.0
-            listOf(
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/AnyAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ArrayAsListAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/CharSequenceAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/CharSequenceContainsSpecBase.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/CollectionAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ComparableAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/FeatureAssertionsBoundedReferenceAlternativeSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/FeatureAssertionsBoundedReferenceSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/FeatureAssertionsClassReferenceSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/FeatureAssertionsManualSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/Fun0AssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/IterableAllAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/IterableAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/IterableContainsSpecBase.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/IteratorAssertionSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ListAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/MapAsEntriesAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/MapAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/MapEntryAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/PairAssertionsSpec.kt",
-                "src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ThrowableAssertionsSpec.kt"
-            ).forEach { file ->
-                removeWithAsciiReporter(file)
-            }
-        }
-        defineSourceFix("jvm") {
-            val source = Paths.get("${project.projectDir}/src/jvmTest/kotlin/META-INF")
-            if (source.exists) {
-                val targetDir = Paths.get("${project.projectDir}/src/jvmTest/resources")
-                targetDir.reCreateDirectory()
-
-                Files.move(
-                    source,
-                    targetDir.resolve("META-INF")
-                )
-            }
-            listOf(
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/BigDecimalAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ChronoLocalDateAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ChronoLocalDateTimeAssertionSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ChronoZonedDateTimeAssertionSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/FileAsPathAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/Fun0AssertionsJvmSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/LocalDateAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/LocalDateTimeAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/OptionalAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/PathAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/PathFeatureAssertionsSpec.kt",
-                "src/jvmTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/ZonedDateTimeAssertionsSpec.kt"
-            ).forEach { file ->
-                removeWithAsciiReporter(file)
-            }
-        }
-    }
-
-
-    listOf("fluent", "infix").forEach { apiShortName ->
-        with(project(":bc-tests:$version-api-$apiShortName-en_GB-bbc")) {
-            the<KotlinMultiplatformExtension>().apply {
-                sourceSets {
-                    val main = file("src/main/kotlin/")
-                    val jvmTest by getting {
-                        kotlin.srcDir(main)
-                    }
-                    main.mkdirs()
-
-                    // we removed  ch.tutteli.atrium.domain.builders.utils.Group in 0.17.0 but it is
-                    // required for the setup of bbc version 0.14.0 and 0.15.0. E.g. it is used in
-                    // ch.tutteli.atrium.api.fluent.en_GB.IterableContainsInOrderOnlyGroupedEntriesAssertionsSpec
-                    main.resolve("Group.kt").writeText(
-                        """
-                            package ch.tutteli.atrium.domain.builders.utils
-                            interface Group<out T> {
-                                /**
-                                 * Returns the members of the group as [List].
-                                 */
-                                fun toList(): List<T>
-                            }
-                        """.trimIndent()
-                    )
-
-                    //we removed PleaseUseReplacementException and it is used in a test - we could also forgive but
-                    //this seems to be easier
-                    main.resolve("PleaseUseReplacementException.kt").writeText(
-                        """
-                            package ch.tutteli.atrium.domain.builders.creating
-                            class PleaseUseReplacementException(reason: String) : Exception(reason)
-                        """.trimIndent()
-                    )
-                    // infix is using ReportFactory since it is using the AsciiReportFactory
-                    main.resolve("ReporterFactory.kt").writeText(
-                        """
-                            @file:Suppress("UNUSED_PARAMETER")
-                            package ch.tutteli.atrium.reporting
-                            import ch.tutteli.atrium.core.polyfills.loadServices
-
-                            val reporter: Reporter by lazy {
-                                val id = "ascii"
-                                val factory = loadServices(ReporterFactory::class)
-                                    .firstOrNull { it.id == id }
-                                    ?: throw IllegalStateException("Could not find ...")
-
-                                factory.create()
-                            }
-                            interface ReporterFactory {
-                                val id: String
-                                fun create(): Reporter
-
-                                companion object {
-                                    const val ATRIUM_PROPERTY_KEY = "ch.tutteli.atrium.reporting.reporterFactory"
-                                    fun specifyFactory(reporterFactoryId: String) {}
-                                    fun specifyFactoryIfNotYetSet(reporterFactoryId: String) {}
-                                }
-                            }
-
-                        """.trimIndent()
-                    )
-                    main.resolve("StaticName.kt").writeText(
-                        """
-                        package ch.tutteli.atrium.api.$apiShortName.en_GB.creating.charsequence.contains.impl
-                        internal object StaticName {
-                            val containsNotValuesFun = "containsNot"
-
-                            val atLeast = "atLeast"
-                            val butAtMost = "butAtMost"
-                            val atMost = "atMost"
-                            val exactly = "exactly"
-                            val notOrAtMost = "notOrAtMost"
-                        }
-                        """.trimIndent()
-                    )
-                }
-            }
-        }
-    }
-}
-
-fun Project.removeWithAsciiReporter(file: String) {
-    rewriteFile(file) {
-        it
-            .replaceFirst("import ch.tutteli.atrium.specs.testutils.WithAsciiReporter", "")
-            .replaceFirst(": WithAsciiReporter()", "")
-    }
-}
-
-with(project(":bc-tests:0.15.0-api-infix-en_GB")) {
-    defineSourceFix("common") {
-        rewriteFile("src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/MapContainsInAnyOrderKeyValueAssertionsSpec.kt") {
-            it
-                .replace("import ch.tutteli.atrium.api.infix.en_GB.creating.map.KeyWithValueCreator", "")
-                .replace("KeyWithValueCreator", "keyValue")
-        }
-
-        removeWithAsciiReporter("src/commonTest/kotlin/ch/tutteli/atrium/api/infix/en_GB/MapContainsSpecBase.kt")
-    }
-}
-
-
-// we removed RawString and co in 0.17.0
-listOf("0.14.0", "0.15.0", "0.16.0").forEach { version ->
-    with(project(":bc-tests:$version-specs")) {
-        defineSourceFix("common") {
-            rewriteFile("src/commonMain/kotlin/main/kotlin/ch/tutteli/atrium/specs/reporting/ObjectFormatterSpec.kt") {
-                it.replaceFirst(
-                    "//TODO remove with 1.0.0\n" +
-                        "        @Suppress(\"DEPRECATION\")\n" +
-                        "        context(\"a \${ch.tutteli.atrium.reporting.StringBasedRawString::class.simpleName}\") {\n" +
-                        "            val result = testee.format(Text(\"hello\"))\n" +
-                        "            it(\"returns the containing string\") {\n" +
-                        "                expect(result).toBe(\"hello\")\n" +
-                        "            }\n" +
-                        "        }\n" +
-                        "\n" +
-                        "        //TODO remove with 1.0.0\n" +
-                        "        @Suppress(\"DEPRECATION\")\n" +
-                        "        context(\"a \${ch.tutteli.atrium.reporting.translating.TranslatableBasedRawString::class.simpleName}\") {\n" +
-                        "            val result = testee.format(ch.tutteli.atrium.api.verbs.internal.AssertionVerb.EXPECT)\n" +
-                        "            it(\"returns the translated string\") {\n" +
-                        "                expect(result).isSameAs(translatedText)\n" +
-                        "            }\n" +
-                        "        }", ""
-                )
-            }
-        }
-    }
-}
-
-
-// TODO 0.18.0 remove once we support js again
-listOf("0.14.0", "0.15.0", "0.16.0").forEach { version ->
-    listOf("fluent", "infix").forEach { apiShortName ->
-        with(project(":bc-tests:$version-api-$apiShortName-en_GB")) {
-            defineSourceFix("common") {
-                rewriteFile("src/commonTest/kotlin/ch/tutteli/atrium/api/$apiShortName/en_GB/FeatureWorstCaseTest.kt") {
-                    it
-                        .replaceFirst("import kotlin.js.JsName", "")
-                        .replaceFirst("@JsName(\"propFun\")", "")
-                }
-            }
-        }
-    }
-}
+//listOf("0.18.0").forEach { version ->
+//    listOf("fluent", "infix").forEach { apiShortName ->
+//        with(project(":bc-tests:$version-api-$apiShortName-en_GB")) {
+//            defineSourceFix("common") {
+//                rewriteFile("src/commonTest/kotlin/ch/tutteli/atrium/api/$apiShortName/en_GB/FeatureWorstCaseTest.kt") {
+//                    it
+//                        .replaceFirst("import kotlin.js.JsName", "")
+//                        .replaceFirst("@JsName(\"propFun\")", "")
+//                }
+//            }
+//        }
+//    }
+//}

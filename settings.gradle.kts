@@ -7,193 +7,8 @@ buildscript {
 
     val allTargets = listOf("common", "jvm", "js")
     val commonJvm = listOf("common", "jvm")
-    //TODO 0.18.0 or 0.18.0 change to allTargets and remove commonJvm once we have transitioned everything to the new MPP plugin
-    val allApisAllTargets = listOf("fluent-en_GB" to commonJvm, "infix-en_GB" to commonJvm)
 
-    val bcConfigs = listOf(
-        Triple(
-            "0.14.0",
-            allApisAllTargets,
-            // forgive for bc and bbc
-            or(
-                "(ch/tutteli/atrium/api/(fluent|infix)/en_GB/" +
-                    or(
-                        // improved reporting
-                        "IterableContainsInOrderOnly.*Spec",
-                        "IterableContainsInAnyOrder.*error cases",
-                        "IterableContainsInAnyOrderOnlyEntriesAssertionsSpec.*nullable cases",
-                        // implementation and spec was wrong
-                        "IterableAssertionsSpec/.*`" + or(
-                            "containsNoDuplicates",
-                            "contains noDuplicates"
-                        ) + "`/list with duplicates",
-                        // changed reporting as most of it is no longer based on IterableLike.contains
-                        "MapAssertionsSpec",
-                        "BigDecimalAssertionsSpec.*overload throws PleaseUseReplacementException",
-                        // we renamed containsNot to notToContain with 0.17.0
-                        "CharSequenceContains.*Spec.*points to containsNot",
-                        "IterableContains.*Spec.*points to containsNot",
-                        // we improved reporting for notToContain with 0.17.0
-                        "IterableContainsNot(Entries|Values)AssertionsSpec.*`containsNot( nullable)?`.*throws AssertionError",
-                        "IterableNoneAssertionsSpec.*`(none|containsNot)( nullable)?`.*throws AssertionError",
-                        // changed reporting for contains.atLeast(1) with 0.17.0
-                        or(
-                            "(CharSequence|Iterable)Contains.*Spec",
-                            "IterableAnyAssertionsSpec"
-                        ) + ".*`.*(any|contains).*`.*(throws.*AssertionError|failing cases)",
-                        // changed reporting for Iterable.all empty collection cases with 0.17.0
-                        "IterableAllAssertionsSpec.*" + "empty collection.*" + "throws AssertionError"
-                    ) + ".*)",
-                // we don't use asci bullet points in reporting since 0.17.0
-                // but have own tests to assure that changing bullet points work
-                "(ch/tutteli/atrium/api/infix/en_GB/.*Spec.*" + or(
-                    "throws",
-                    "is thrown",
-                    "error message contains",
-                    "shows (all )?suppressed",
-                    "null was missing", "failing cases"
-                ) + ".*)"
-            ).let { commonPatterns ->
-                Pair(
-                    // bc
-                    commonPatterns,
-                    // bbc
-                    true to
-                        or(
-                            commonPatterns,
-                            "(ch/tutteli/atrium/api/(fluent|infix)/en_GB/" +
-                                or(
-                                    // removed overload which expects kClass
-                                    "AnyAssertionsSpec.*toBeNullIfNullGivenElse.*",
-                                    "AnyAssertionSamples.toBeNullIfNullGivenElse",
-                                    // returnValueOf was part of Assert, no longer in there
-                                    or(
-                                        "IterableAnyAssertionsSpec",
-                                        "IterableContainsInAnyOrderAtLeast1EntriesAssertionsSpec",
-                                        "IterableContainsInAnyOrderOnlyEntriesAssertionsSpec",
-                                        "IterableContainsInOrderOnlyEntriesAssertionsSpec"
-                                    ) + ".*/returnValueOf",
-                                    // we moved MetaFeature and MetaFeatureOptions
-                                    "FeatureAssertions.*(Manual|Reference).*Spec",
-                                    // we removed ExpectBuilder and SubjectLessSpec uses it
-                                    ".*assertion function can be used in an AssertionGroup with an ExplanatoryAssertionGroupType and reportBuilder without failure.*"
-                                ) + ".*)",
-                            // removed overload which expects kClass
-                            "ch.tutteli.atrium.api.fluent.en_GB.samples.AnyAssertionSamples#toBeNullIfNullGivenElse"
-                        )
-                )
-            }
-        ),
-        Triple(
-            "0.15.0",
-            allApisAllTargets,
-            // forgive for bc and bbc
-            or(
-                "(ch/tutteli/atrium/api/(fluent|infix)/en_GB/" +
-                    or(
-                        "IterableContainsInOrderOnly.*error cases",
-                        "IterableContainsInAnyOrder.*error cases",
-                        "IterableContainsInAnyOrderOnlyEntriesAssertionsSpec.*nullable cases",
-                        // implementation and spec was wrong
-                        "IterableAssertionsSpec/.*`" + or(
-                            "containsNoDuplicates",
-                            "contains noDuplicates"
-                        ) + "`/list with duplicates",
-                        "BigDecimalAssertionsSpec.*overload throws PleaseUseReplacementException.*",
-                        // we renamed containsNot to notToContain with 0.17.0
-                        "CharSequenceContains.*Spec.*points to containsNot",
-                        "IterableContains.*Spec.*points to containsNot",
-                        // we improved reporting for notToContain with 0.17.0
-                        "IterableContainsNot(Entries|Values)AssertionsSpec.*`containsNot.*`.*throws AssertionError",
-                        "IterableNoneAssertionsSpec.*`(none|containsNot).*`.*throws AssertionError",
-                        // changed reporting for contains.atLeast(1) with 0.17.0
-                        or(
-                            "(CharSequence|Iterable)Contains.*Spec",
-                            "IterableAnyAssertionsSpec"
-                        ) + ".*`.*(any|contains).*`.*(throws.*AssertionError|failing cases)",
-                        // changed reporting for Iterable.all empty collection cases with 0.17.0
-                        "IterableAllAssertionsSpec.*" + "empty collection.*" + "throws AssertionError"
-                    ) + ".*)",
-                // we don't use asci bullet points in reporting since 0.17.0
-                // but have own tests to assure that changing bullet points work
-                "(ch/tutteli/atrium/api/infix/en_GB/.*Spec.*" + or(
-                    "throws",
-                    "is thrown",
-                    "error message contains",
-                    "shows (all )?suppressed",
-                    "null was missing", "failing cases",
-                    "provoke the failing"
-                ) + ".*)"
-            ).let { commonPatterns ->
-                Pair(
-                    // bc
-                    or(
-                        commonPatterns,
-                        "(ch/tutteli/atrium/api/infix/en_GB/" +
-                            or(
-                                // looks like we were unlucky in infix and kotlin actually has chosen the deprecated overload
-                                // in bytecode instead of the new one in those particular specs (not in others). No idea why...
-                                // we have removed the deprecated `contains o` function in 0.16.0
-                                "IterableContainsInOrderOnlyGroupedEntriesAssertionsSpec.*",
-                                "IterableContainsInOrderOnlyGroupedValuesAssertionsSpec.*"
-                            ) + ".*)"
-                    ),
-                    // bbc
-                    true to or(
-                        commonPatterns,
-                        "(ch/tutteli/atrium/api/(fluent|infix)/en_GB/" +
-                            or(
-                                // removed overload which expects kClass
-                                "AnyAssertionsSpec.*toBeNullIfNullGivenElse.*",
-                                "AnyAssertionSamples.toBeNullIfNullGivenElse",
-                                // API uses now Group from logic
-                                "IterableContainsInOrderOnlyGrouped.*Spec",
-                                // returnValueOf was part of Assert, no longer in there
-                                or(
-                                    "IterableAnyAssertionsSpec",
-                                    "IterableContainsInAnyOrderAtLeast1EntriesAssertionsSpec",
-                                    "IterableContainsInAnyOrderOnlyEntriesAssertionsSpec",
-                                    "IterableContainsInOrderOnlyEntriesAssertionsSpec"
-                                ) + ".*/returnValueOf",
-                                // we moved MetaFeature and MetaFeatureOptions
-                                "FeatureAssertions.*(Manual|Reference).*Spec",
-                                // we removed ExpectBuilder and SubjectLessSpec uses it
-                                ".*assertion function can be used in an AssertionGroup with an ExplanatoryAssertionGroupType and report without failure.*"
-                            ) + ".*)"
-                    )
-                )
-            }
-        ),
-        Triple(
-            "0.16.0",
-            allApisAllTargets,
-            // forgive for bc and bbc
-            ("(ch/tutteli/atrium/api/(fluent|infix)/en_GB/" + or(
-                // we renamed containsNot to notToContain with 0.17.0
-                "CharSequenceContains.*Spec.*points to containsNot",
-                "IterableContains.*Spec.*points to containsNot",
-                // we improved reporting for containsNoDuplicates
-                "IterableExpectationsSpec.*`(containsNoDuplicates|contains noDuplicates)`",
-                // we improved reporting for notToContain with 0.17.0
-                "IterableContainsNot(Entries|Values)ExpectationsSpec.*`containsNot.*`.*throws AssertionError",
-                "IterableNoneExpectationsSpec.*`(none|containsNot).*`.*throws AssertionError",
-                // changed reporting for contains.atLeast(1) with 0.17.0
-                or(
-                    "(CharSequence|Iterable)Contains.*Spec",
-                    "IterableAnyExpectationsSpec"
-                ) + ".*`.*(any|contains).*`.*(throws.*AssertionError|failing cases)",
-                // changed reporting for Iterable.all empty collection cases with 0.17.0
-                "IterableAllExpectationsSpec.*" + "empty collection.*" + "throws AssertionError"
-            ) + ".*)").let { commonPatterns ->
-                Pair(
-                    // bc
-                    commonPatterns,
-                    // bbc
-                    true to commonPatterns
-                )
-            }
-        )
-    )
+    val bcConfigs: List<Triple<String, List<Pair<String, List<String>>>, Pair<String, Pair<Boolean, String>>>> = listOf()
     (gradle as ExtensionAware).extra.apply {
         apply {
             set("tutteli_plugins_version", "0.32.2")
@@ -236,45 +51,31 @@ if (System.getenv("BC") != null) {
     }
 }
 
-includeBundleAndApisWithExtensionsAndSmokeTest("fluent-en_GB", "infix-en_GB")
-includeKotlinJvmJs("core", "atrium-core")
+listOf("fluent-en_GB", "infix-en_GB").forEach { apiName ->
+    include("bundles/$apiName", "atrium-$apiName")
+    include("bundles/$apiName/smoke-tests", "atrium-$apiName-smoke-test")
+    include("bundles/$apiName/smoke-tests", "atrium-$apiName-smoke-test-kotlin_1_3")
+    include("apis/$apiName",  "atrium-api-$apiName")
+    include("apis/$apiName/extensions", "atrium-api-$apiName-kotlin_1_3")
+}
 
-includeKotlinJvmJsWithExtensions("logic", "atrium-logic")
+include("", "atrium-core")
+include("logic", "atrium-logic")
+include("logic/extensions", "atrium-logic-kotlin_1_3")
 
-includeKotlinJvmJs("misc/specs", "atrium-specs")
-includeKotlinJvmJs("misc/verbs", "atrium-verbs")
-includeKotlinJvmJs("misc/verbs-internal", "atrium-verbs-internal")
+listOf("en_GB", "de_CH").forEach{ lang ->
+    include("translations" ,"atrium-translations-$lang")
+}
+
+include("misc", "atrium-verbs")
+include("misc", "atrium-verbs-internal")
+include("misc", "atrium-specs")
 include("misc/tools", "readme-examples")
-
-includeKotlinJvmJs("translations/de_CH", "atrium-translations-de_CH")
-includeKotlinJvmJs("translations/en_GB", "atrium-translations-en_GB")
 
 fun Settings_gradle.includeBc(oldVersion: String, module: String) {
     val projectName = "$oldVersion-$module"
     include("bc-tests:$projectName")
     project(":bc-tests:$projectName").projectDir = file("$bcTestsOldPath/$projectName")
-}
-
-fun Settings_gradle.includeBundleAndApisWithExtensionsAndSmokeTest(vararg apiNames: String) {
-    apiNames.forEach { apiName ->
-        includeKotlinJvmJs("bundles/$apiName", "atrium-$apiName")
-        if (JavaVersion.current() >= JavaVersion.VERSION_1_9) {
-            include("bundles/$apiName/", "atrium-$apiName-smoke-test")
-            include("bundles/$apiName/extensions", "atrium-$apiName-smoke-test-kotlin_1_3")
-        }
-        includeKotlinJvmJsWithExtensions("apis/$apiName", "atrium-api-$apiName")
-    }
-}
-
-fun Settings_gradle.includeKotlinJvmJs(subPath: String, module: String) {
-    include(subPath, "$module-common")
-    include(subPath, "$module-js")
-    include(subPath, "$module-jvm")
-}
-
-fun Settings_gradle.includeKotlinJvmJsWithExtensions(subPath: String, module: String) {
-    includeKotlinJvmJs(subPath, module)
-    includeKotlinJvmJs("$subPath/extensions/kotlin_1_3", "$module-kotlin_1_3")
 }
 
 fun Settings_gradle.include(subPath: String, projectName: String) {

@@ -1,8 +1,0 @@
-description = 'Specifies the internally used assertion verbs'
-
-dependencies {
-    api prefixedProject('core-jvm')
-    api prefixedProject('logic-jvm')
-
-    testImplementation prefixedProject('specs-jvm')
-}

@@ -17,14 +17,15 @@ jobs:
         java_version: [ 11, 14 ]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: "Set up JDK ${{ matrix.java_version }}"
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v3
         with:
+          distribution: 'adopt'
           java-version: ${{ matrix.java_version }}
 
       - name: Cache maven dependencies
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         with:
           path: ~/.m2/repository
           key: samples-${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -33,7 +34,7 @@ jobs:
 
       - name: build js sample
         run: ./gradlew build
-        working-directory: samples\js
+        working-directory: samples\js\kotlin-test
 
       - name: build Spek sample
         run: ./gradlew build
@@ -45,7 +46,7 @@ jobs:
 
       - name: build MPP sample
         run: ./gradlew build
-        working-directory: samples\multiplatform
+        working-directory: samples\multiplatform\kotlin-test
 
       # Kotlin does not yet support to generate jdk 14 byte code
       - name: determine kotlin compile target

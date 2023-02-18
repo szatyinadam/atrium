@@ -47,14 +47,14 @@ class FeatureExtractorSpec : Spek({
 
     //@formatter:off
     test("ex-its-group") {
-        expect(myPerson) { // forms an assertion group block
+        expect(myPerson) { // forms an expectation-group
 
-            its({ firstName }) {   // forms an assertion group block
+            its({ firstName }) {   // forms an expectation-group
                 toStartWith("Pe")  // fails
                 toEndWith("er")    // is evaluated nonetheless
             }                      // fails as a whole
 
-            // still evaluated, as it is in outer assertion group block
+            // still evaluated, as it is in outer expectation-group
             its { lastName }.toEqual("Dummy")
         }
     }
@@ -69,14 +69,14 @@ class FeatureExtractorSpec : Spek({
 
     //@formatter:off
     test("ex-property-methods-group") {
-        expect(myPerson) { // forms an assertion group block
+        expect(myPerson) { // forms an expectation-group
 
-            feature({ f(it::firstName) }) { // forms an assertion group block
+            feature({ f(it::firstName) }) { // forms an expectation-group
                 toStartWith("Pe")           // fails
                 toEndWith("er")             // is evaluated nonetheless
             }                               // fails as a whole
 
-            // still evaluated, as it is in outer assertion group block
+            // still evaluated, as it is in outer expectation-group
             feature { f(it::lastName) }.toEqual("Dummy")
         }
     }
@@ -102,8 +102,8 @@ class FeatureExtractorSpec : Spek({
     test("ex-arbitrary-features") {
         //snippet-Family-insert
         expect(myFamily)
-            .feature("number of members", { members.size }) { toEqual(1) } // subject still Family afterwards
-            .feature("first member's name") { members.first().name }       // subject narrowed to String
+            .feature("the number of members", { members.size }) { toEqual(1) } // subject still Family afterwards
+            .feature("the first member's name") { members.first().name }       // subject narrowed to String
             .toEqual("Peter")
     }
 
@@ -115,7 +115,7 @@ class FeatureExtractorSpec : Spek({
         feature(Pair<F, *>::first) { toEqual(expected) }
     //snippet-within-funs-end
 
-    test("ex-within-assertion-functions") {
+    test("ex-within-expectation-functions") {
         //snippet-within-funs-insert
 
         expect(listOf(1 to "a", 2 to "b")).get(10) {
